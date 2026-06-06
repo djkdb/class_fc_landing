@@ -9,6 +9,7 @@ const matchRoutes = require("./routes/matchRoutes");
 const noticeRoutes = require("./routes/noticeRoutes");
 const galleryRoutes = require("./routes/galleryRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const guestbookRoutes = require("./routes/guestbookRoutes");
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use("/api/matches", matchRoutes);
 app.use("/api/notices", noticeRoutes);
 app.use("/api/gallery", galleryRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/guestbook", guestbookRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
