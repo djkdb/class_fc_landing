@@ -3,12 +3,19 @@ import { youtubeThumb } from "../data/youtube";
 import MatchCard from "../components/MatchCard";
 import NoticeCard from "../components/NoticeCard";
 import logo from "../assets/classfc-logo.png";
+import api from "../api";
 import "../styles/home.css";
 
 // 랜딩페이지
 function Home({ setPage, user, members, matches, notices, gallery }) {
   const [, setTick] = useState(0);
   const [galleryOffset, setGalleryOffset] = useState(0);
+  const [guestbook, setGuestbook] = useState([]);
+  const [gbName, setGbName] = useState("");
+  const [gbMessage, setGbMessage] = useState("");
+  const [gbLoading, setGbLoading] = useState(false);
+  const [gbError, setGbError] = useState("");
+  const [gbSuccess, setGbSuccess] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
@@ -22,6 +29,11 @@ function Home({ setPage, user, members, matches, notices, gallery }) {
     }, 6000);
     return () => clearInterval(id);
   }, [gallery.length]);
+
+  // 방명록 데이터 조회 (DB에서 가져오기)
+  useEffect(() => {
+    api.get("/api/guestbook").then(setGuestbook).catch(() => {});
+  }, []);
 
   const nowMs = Date.now();
   const upcoming = matches
@@ -57,8 +69,42 @@ function Home({ setPage, user, members, matches, notices, gallery }) {
     }
   }
 
+  const handleGuestbookSubmit = async (e) => {
+    e.preventDefault();
+    if (!gbName.trim() || !gbMessage.trim()) {
+      setGbError("이름과 메시지를 모두 입력해주세요.");
+      return;
+    }
+    setGbLoading(true);
+    setGbError("");
+    setGbSuccess(false);
+    try {
+      // DB에 방명록 등록
+      const newEntry = await api.post("/api/guestbook", {
+        name: gbName.trim(),
+        message: gbMessage.trim(),
+      });
+      setGuestbook((prev) => [newEntry, ...prev]);
+      setGbName("");
+      setGbMessage("");
+      setGbSuccess(true);
+      setTimeout(() => setGbSuccess(false), 3000);
+    } catch (err) {
+      setGbError(err.message || "등록에 실패했습니다. 다시 시도해주세요.");
+    } finally {
+      setGbLoading(false);
+    }
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+  };
+
   return (
     <div className="home-page">
+      {/* Hero Section */}
       <section className="hero-section">
         <img src={logo} alt="" className="hero-watermark" />
         <div className="container hero-inner">
@@ -106,6 +152,7 @@ function Home({ setPage, user, members, matches, notices, gallery }) {
         </div>
       </section>
 
+      {/* Next Match Countdown */}
       {nextMatch && (
         <section className="next-match-section">
           <div className="container">
@@ -126,6 +173,7 @@ function Home({ setPage, user, members, matches, notices, gallery }) {
         </section>
       )}
 
+      {/* Recent Notices */}
       <section className="home-section">
         <div className="container">
           <div className="home-section-head">
@@ -148,6 +196,7 @@ function Home({ setPage, user, members, matches, notices, gallery }) {
         </div>
       </section>
 
+      {/* Gallery Preview */}
       <section className="home-section gallery-preview-section">
         <div className="container">
           <div className="home-section-head">
@@ -160,48 +209,132 @@ function Home({ setPage, user, members, matches, notices, gallery }) {
             </button>
           </div>
 
-          <div
-            className="gallery-preview-grid"
-          >
+          <div className="gallery-preview-grid">
             {previewGallery.map((g, i) => {
-                const isYt = g.mediaType === "youtube";
-                const cover = isYt ? youtubeThumb(g.imageUrl) : g.imageUrl;
-                const tileStyle = cover
-                  ? {
-                      backgroundImage: "url(" + cover + ")",
-                      backgroundSize: "cover",
-                      backgroundPosition: "center",
-                    }
-                  : { background: g.gradient };
-                return (
-                  <div
-                    key={g.id}
-                    className={`gallery-preview-tile tile-${i}`}
-                    style={tileStyle}
-                    onClick={() => setPage("gallery")}
-                  >
-                    {isYt && <div className="gallery-tile-play">▶</div>}
-                    <div className="gallery-tile-overlay">
-                      <div className="gallery-tile-tag">{g.tag}</div>
-                      <div className="gallery-tile-title">{g.title}</div>
-                    </div>
+              const isYt = g.mediaType === "youtube";
+              const cover = isYt ? youtubeThumb(g.imageUrl) : g.imageUrl;
+              const tileStyle = cover
+                ? {
+                    backgroundImage: "url(" + cover + ")",
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                  }
+                : { background: g.gradient };
+              return (
+                <div
+                  key={g.id}
+                  className={`gallery-preview-tile tile-${i}`}
+                  style={tileStyle}
+                  onClick={() => setPage("gallery")}
+                >
+                  {isYt && <div className="gallery-tile-play">▶</div>}
+                  <div className="gallery-tile-overlay">
+                    <div className="gallery-tile-tag">{g.tag}</div>
+                    <div className="gallery-tile-title">{g.title}</div>
                   </div>
-                );
-              })}
+                </div>
+              );
+            })}
           </div>
-            {gallery.length > 0 && (
+          {gallery.length > 0 && (
             <div className="gallery-slide-dots">
-              {previewGallery.map((g, i) => (
-                <span
-                  key={i}
-                  className={i === 0 ? "slide-dot active" : "slide-dot"}
-                ></span>
+              {previewGallery.map((_, i) => (
+                <span key={i} className={i === 0 ? "slide-dot active" : "slide-dot"}></span>
               ))}
             </div>
-            )}
+          )}
         </div>
       </section>
 
+      {/* Guestbook Section - DB 조회 및 삽입 */}
+      <section className="home-section guestbook-section">
+        <div className="container">
+          <div className="home-section-head">
+            <div>
+              <div className="section-subtitle">CONNECT</div>
+              <h2 className="section-title">방명록</h2>
+            </div>
+          </div>
+
+          <div className="guestbook-layout">
+            {/* 방명록 작성 폼 */}
+            <div className="guestbook-form-wrap">
+              <div className="guestbook-form-card">
+                <div className="guestbook-form-title">메시지 남기기</div>
+                <p className="guestbook-form-desc">
+                  CLASS FC에 응원 메시지를 남겨보세요! 📣
+                </p>
+                <form onSubmit={handleGuestbookSubmit}>
+                  <div className="gb-field">
+                    <label className="gb-label">이름</label>
+                    <input
+                      type="text"
+                      className="gb-input"
+                      placeholder="이름을 입력하세요 (최대 30자)"
+                      value={gbName}
+                      onChange={(e) => setGbName(e.target.value)}
+                      maxLength={30}
+                      disabled={gbLoading}
+                    />
+                  </div>
+                  <div className="gb-field">
+                    <label className="gb-label">메시지</label>
+                    <textarea
+                      className="gb-textarea"
+                      placeholder="응원 메시지를 입력하세요 (최대 200자)"
+                      value={gbMessage}
+                      onChange={(e) => setGbMessage(e.target.value)}
+                      maxLength={200}
+                      rows={4}
+                      disabled={gbLoading}
+                    />
+                    <div className="gb-char-count">{gbMessage.length}/200</div>
+                  </div>
+                  {gbError && <div className="gb-error">{gbError}</div>}
+                  {gbSuccess && <div className="gb-success">✓ 메시지가 등록되었습니다!</div>}
+                  <button
+                    type="submit"
+                    className="btn-primary-green w-100"
+                    disabled={gbLoading}
+                  >
+                    {gbLoading ? "등록 중..." : "메시지 등록"}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* 방명록 목록 */}
+            <div className="guestbook-list-wrap">
+              {guestbook.length === 0 ? (
+                <div className="guestbook-empty">
+                  <div className="guestbook-empty-icon">💬</div>
+                  <div className="guestbook-empty-text">아직 방명록이 없습니다.</div>
+                  <div className="guestbook-empty-sub">첫 번째 메시지를 남겨보세요!</div>
+                </div>
+              ) : (
+                <div className="guestbook-list">
+                  {guestbook.map((entry) => (
+                    <div key={entry.id} className="guestbook-item">
+                      <div className="gb-item-header">
+                        <div className="gb-item-avatar">
+                          {entry.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="gb-item-meta">
+                          <div className="gb-item-name">{entry.name}</div>
+                          <div className="gb-item-date">{formatDate(entry.created_at)}</div>
+                        </div>
+                      </div>
+                      <div className="gb-item-message">{entry.message}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
       <section className="home-cta-section">
         <div className="container">
           <div className="home-cta-box">
@@ -227,6 +360,7 @@ function Home({ setPage, user, members, matches, notices, gallery }) {
         </div>
       </section>
 
+      {/* Project Info Section */}
       <section className="project-info-section">
         <div className="container">
           <div className="project-info-grid">
@@ -245,7 +379,7 @@ function Home({ setPage, user, members, matches, notices, gallery }) {
                 <li>스쿼드 메이커 · 라인업</li>
                 <li>통계 · MOTM 투표</li>
                 <li>공지 · 댓글</li>
-                <li>갤러리</li>
+                <li>갤러리 · 방명록</li>
               </ul>
             </div>
             <div className="pi-col">
